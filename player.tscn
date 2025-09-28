@@ -1,4 +1,4 @@
-[gd_scene load_steps=35 format=3 uid="uid://fwrbjg8rptin"]
+[gd_scene load_steps=36 format=3 uid="uid://fwrbjg8rptin"]
 
 [ext_resource type="Texture2D" uid="uid://15vwhxqaq2y4" path="res://Assets/Fire vizard/Attack_1.png" id="1_hqtel"]
 [ext_resource type="Texture2D" uid="uid://ck5vvj2c8ebdr" path="res://Assets/Fire vizard/Jump.png" id="2_i3pqv"]
@@ -8,61 +8,85 @@
 [sub_resource type="GDScript" id="GDScript_i3pqv"]
 script/source = "extends CharacterBody2D
 
-const SPEED = 120.0
-const JUMP_VELOCITY = -400.0
+const SPEED = 200
+const JUMP_VELOCITY = -200
+const GRAVITY = 900
+const BLOOD_COST = 5
 
-@onready var animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
+@onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var blood_bar: ProgressBar = $BloodBar
+@onready var attack_area: Area2D = $AttackArea
 
-var blood: float = 100.0  # percentage (0–100)
+var blood: float = 100
+var is_attacking: bool = false
 
-func _ready() -> void:
-	# Make sure the bar is set up correctly
+func _ready():
 	blood_bar.min_value = 0
 	blood_bar.max_value = 100
-	blood_bar.step = 0.1  # allow decimals
 	blood_bar.value = blood
+	sprite.animation_finished.connect(_on_animation_finished)
+	
+	# Keep attack area always monitoring
+	attack_area.monitoring = true
 
-func _physics_process(delta: float) -> void:
-	# Gravity
+func _physics_process(delta):
 	if not is_on_floor():
-		velocity += get_gravity() * delta
-
-	# Jump
-	if Input.is_action_just_pressed(\"up\") and is_on_floor():
+		velocity.y += GRAVITY * delta
+	
+	if Input.is_action_just_pressed(\"jump\") and is_on_floor():
 		velocity.y = JUMP_VELOCITY
-
-	# Horizontal movement
-	var direction := Input.get_axis(\"left\", \"right\")
+		sprite.play(\"jump\")
+	
+	var direction = Input.get_axis(\"left\", \"right\")
 	if direction != 0:
 		velocity.x = direction * SPEED
-		animated_sprite.flip_h = direction < 0
+		sprite.flip_h = direction < 0
+		if is_on_floor() and not is_attacking:
+			sprite.play(\"run\")
 	else:
 		velocity.x = move_toward(velocity.x, 0, SPEED)
-
-	# Animations
-	if not is_on_floor():
-		if velocity.y < 0:
-			animated_sprite.play(\"jump\")
-		else:
-			animated_sprite.play(\"fall\")
-	elif direction != 0:
-		animated_sprite.play(\"run\")
-	else:
-		animated_sprite.play(\"idle\")
-
+		if is_on_floor() and not is_attacking:
+			sprite.play(\"idle\")
+	
 	move_and_slide()
-
-	# Attack input
-	if Input.is_action_just_pressed(\"attack\"):
+	
+	if Input.is_action_just_pressed(\"attack\") and not is_attacking and blood >= BLOOD_COST:
 		attack()
 
-func attack() -> void:
-	if blood > 0:
-		blood -= 5.0  # reduce by 5%
-		blood = clamp(blood, 0, 100)  # keep in range
-		blood_bar.value = blood
-		animated_sprite.play(\"attack\")
+func attack():
+	is_attacking = true
+	blood -= BLOOD_COST
+	blood = clamp(blood, 0, 100)
+	blood_bar.value = blood
+	sprite.play(\"attack\")
+	
+	# Immediately check for enemies and damage them
+	var enemies = attack_area.get_overlapping_bodies()
+	print(\"Found \", enemies.size(), \" enemies in attack range\")
+	
+	for enemy in enemies:
+		if enemy.is_in_group(\"enemies\"):
+			print(\"Attacking enemy: \", enemy.name)
+			enemy.take_damage(4)
+		else:
+			print(\"Body is not an enemy: \", enemy.name)
+	
+	# Set timer to end attack
+	get_tree().create_timer(0.6).timeout.connect(func(): end_attack())
+
+func end_attack():
+	is_attacking = false
+	if is_on_floor():
+		sprite.play(\"idle\")
+
+func _on_animation_finished():
+	if sprite.animation == \"attack\":
+		end_attack()
+
+func add_blood(amount: float) -> void:
+	blood += amount
+	blood = clamp(blood, 0, 100)
+	blood_bar.value = blood
 "
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_qtqh7"]
@@ -285,6 +309,9 @@ animations = [{
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_1bvp3"]
 height = 60.0
 
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hqtel"]
+size = Vector2(21, 35)
+
 [node name="Player" type="CharacterBody2D"]
 script = SubResource("GDScript_i3pqv")
 
@@ -302,5 +329,15 @@ offset_left = -37.0
 offset_top = -43.0
 offset_right = 37.0
 offset_bottom = -39.0
+theme_override_colors/font_color = Color(0.90014344, 0.95983905, 0.9999998, 1)
 value = 100.0
 show_percentage = false
+
+[node name="AttackArea" type="Area2D" parent="."]
+position = Vector2(19, 0)
+collision_layer = 4
+collision_mask = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="AttackArea"]
+position = Vector2(2.5, -0.5)
+shape = SubResource("RectangleShape2D_hqtel")

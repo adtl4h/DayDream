@@ -1,6 +1,40 @@
-[gd_scene load_steps=27 format=3 uid="uid://155dka3wp6a3"]
+[gd_scene load_steps=28 format=3 uid="uid://155dka3wp6a3"]
 
 [ext_resource type="Texture2D" uid="uid://fxpssy0i88t0" path="res://Assets/Kauzz Cave Tiles/Sprites/spr_golem_walking_strip23.png" id="1_7k104"]
+
+[sub_resource type="GDScript" id="GDScript_7k104"]
+script/source = "extends CharacterBody2D
+
+@export var max_health: float = 100.0
+var health: float
+@onready var health_bar: ProgressBar = $HealthBar
+
+func _ready():
+	health = max_health
+	health_bar.min_value = 0
+	health_bar.max_value = max_health
+	health_bar.value = health
+	add_to_group(\"enemies\")
+	
+	# Set enemy collision layers
+	set_collision_layer_value(2, true)   # Enemy on layer 2
+	set_collision_layer_value(1, false)  # Remove from layer 1
+	set_collision_mask_value(1, true)    # Enemy collides with layer 1 (ground)
+	set_collision_mask_value(2, false)   # Remove mask for layer 2
+	
+	print(\"Enemy ready: \", name)  # Debug line
+	health_bar.modulate = Color.RED
+
+func take_damage(amount: float):
+	health -= amount
+	health = clamp(health, 0, max_health)
+	health_bar.value = health
+	if health <= 0:
+		die()
+
+func die():
+	queue_free()
+"
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_4gyqm"]
 atlas = ExtResource("1_7k104")
@@ -176,6 +210,8 @@ radius = 33.0
 height = 142.0
 
 [node name="Enemy" type="CharacterBody2D"]
+collision_layer = 2
+script = SubResource("GDScript_7k104")
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 sprite_frames = SubResource("SpriteFrames_qgdfx")
@@ -184,3 +220,10 @@ autoplay = "walk"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CapsuleShape2D_7xaro")
+
+[node name="HealthBar" type="ProgressBar" parent="."]
+offset_left = -165.0
+offset_top = -79.0
+offset_right = 30.0
+offset_bottom = -75.0
+value = 100.0
